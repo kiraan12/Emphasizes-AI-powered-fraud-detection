@@ -1,0 +1,39 @@
+# Large data files
+creditcard.csv
+*.csv
+
+# Model files (too large for GitHub)
+*.pkl
+*.joblib
+*.h5
+*.pkl.gz
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environment
+venv/
+env/
+ENV/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+# Streamlit
+.streamlit/
+
+# Logs
+*.log
