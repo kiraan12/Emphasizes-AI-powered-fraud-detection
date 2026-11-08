@@ -1,0 +1,52 @@
+{
+  "model_name": "random_forest",
+  "threshold": 0.5,
+  "random_state": 42,
+  "test_size": 0.2,
+  "val_size": 0.2,
+  "trained_at": "2026-11-06T14:46:26.228033+00:00",
+  "dataset_rows": 283726,
+  "dataset_columns": 31,
+  "class_distribution": {
+    "legitimate": 283253,
+    "fraud": 473
+  },
+  "feature_columns": [
+    "Time",
+    "V1",
+    "V2",
+    "V3",
+    "V4",
+    "V5",
+    "V6",
+    "V7",
+    "V8",
+    "V9",
+    "V10",
+    "V11",
+    "V12",
+    "V13",
+    "V14",
+    "V15",
+    "V16",
+    "V17",
+    "V18",
+    "V19",
+    "V20",
+    "V21",
+    "V22",
+    "V23",
+    "V24",
+    "V25",
+    "V26",
+    "V27",
+    "V28",
+    "Amount"
+  ],
+  "target_column": "Class",
+  "all_models_validation_f1": {
+    "logistic_regression": 0.6984126984126984,
+    "random_forest": 0.8904109589041096,
+    "xgboost": 0.8198757763975155
+  }
+}
