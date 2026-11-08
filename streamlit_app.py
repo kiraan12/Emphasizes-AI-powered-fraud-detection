@@ -13,7 +13,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from app.config import DATA_PATH
+from app.config import DATA_PATH, SAMPLE_DATA_PATH
 from app.ml.predict import (
     ModelBundle,
     get_feature_importances,
@@ -78,17 +78,19 @@ def load_model() -> ModelBundle | None:
 
 
 @st.cache_data
-def load_sample_data() -> pd.DataFrame | None:
-    """Load the credit card dataset if available.
+def load_sample_data() -> tuple[pd.DataFrame | None, str | None]:
+    """Load the dataset, falling back to the demonstration sample.
 
-    Returns None when the CSV is not deployed (e.g. Streamlit Community
-    Cloud, where large files are excluded via .gitignore). Pages that
-    require the dataset handle None gracefully.
+    Tries ``creditcard.csv`` first, then ``creditcard_sample.csv``.
+    Returns ``(df, source)`` where source is ``"full"``, ``"sample"``,
+    or ``None`` when neither file is available (e.g. minimal deployments).
     """
-    try:
-        return pd.read_csv(DATA_PATH)
-    except FileNotFoundError:
-        return None
+    for path, source in ((DATA_PATH, "full"), (SAMPLE_DATA_PATH, "sample")):
+        try:
+            return pd.read_csv(path), source
+        except FileNotFoundError:
+            continue
+    return None, None
 
 
 def get_ai_explanation(result: dict, features: dict, feature_names: list[str],
@@ -195,11 +197,14 @@ def ai_chatbot_response(user_question: str, model_info: dict) -> str:
     return "🤖 **AI Assistant:** I can help with questions about fraud detection, model accuracy, features, and prevention strategies. Please ask a specific question!"
 
 
-def generate_ai_report(df: pd.DataFrame | None, model_info: dict) -> str:
+def generate_ai_report(df: pd.DataFrame | None, model_info: dict,
+                       data_source: str | None = None) -> str:
     """Generate an AI-powered analysis report using real metrics.
 
-    ``df`` may be None when the dataset is not deployed; dataset-dependent
+    ``df`` may be None when no dataset is deployed; dataset-dependent
     stats are then reported as unavailable rather than fabricated.
+    When ``data_source`` is ``"sample"``, dataset stats are labeled as
+    demonstration data.
     """
     try:
         test_metrics = model_info.get("test_metrics", {})
@@ -214,8 +219,14 @@ def generate_ai_report(df: pd.DataFrame | None, model_info: dict) -> str:
             fraud_rate = f"{(df['Class'].sum() / len(df)) * 100:.3f}%"
             high_risk_count = f"{len(df[df['Amount'] > df['Amount'].quantile(0.95)]):,}"
             avg_fraud_amount = f"${df[df['Class'] == 1]['Amount'].mean():.2f}"
+            data_note = (
+                "- **Data source**: Demonstration sample (`creditcard_sample.csv`) — "
+                "statistics below are illustrative, not full-dataset results\n"
+                if data_source == "sample" else ""
+            )
         else:
             total_transactions = fraud_rate = high_risk_count = avg_fraud_amount = "N/A (dataset unavailable)"
+            data_note = ""
 
         report = f"""
         # 🤖 AI-Powered Fraud Detection Analysis Report
@@ -227,7 +238,7 @@ def generate_ai_report(df: pd.DataFrame | None, model_info: dict) -> str:
         ## 🎯 Key Findings
 
         ### Dataset Analysis
-        - **Total Transactions**: {total_transactions}
+        {data_note}- **Total Transactions**: {total_transactions}
         - **Fraud Rate**: {fraud_rate}
         - **Model**: {model_name}
         - **Decision Threshold**: {model_info.get('threshold', 'N/A')}
@@ -403,7 +414,7 @@ def main() -> None:
     )
 
     bundle = load_model()
-    df = load_sample_data()
+    df, data_source = load_sample_data()
 
     # The model is required for all prediction pages; the dataset is optional
     # (excluded from deployment via .gitignore on Streamlit Community Cloud).
@@ -455,12 +466,20 @@ def main() -> None:
 
         if df is None:
             st.info(
-                "The dataset file `creditcard.csv` is not available in this "
-                "deployment, so dataset analysis, insights, and visualizations "
-                "are disabled. Fraud Detection, AI Assistant, AI Report, and "
-                "About pages work without it."
+                "No dataset file is available in this deployment "
+                "(`creditcard.csv` / `creditcard_sample.csv`), so dataset "
+                "analysis, insights, and visualizations are disabled. "
+                "Fraud Detection, AI Assistant, AI Report, and About pages "
+                "work without it."
             )
         else:
+            if data_source == "sample":
+                st.warning(
+                    "⚠️ **Demonstration data**: showing `creditcard_sample.csv` "
+                    "(a small sample), not the full `creditcard.csv` dataset. "
+                    "All statistics and visualizations below are illustrative "
+                    "sample-based results, not full-dataset results."
+                )
             col1, col2, col3, col4 = st.columns(4)
 
             with col1:
@@ -539,7 +558,7 @@ def main() -> None:
     elif page == "📋 AI Report":
         st.markdown("### 📋 AI-Generated Analysis Report")
 
-        report = generate_ai_report(df, model_info)
+        report = generate_ai_report(df, model_info, data_source=data_source)
         st.markdown(report)
 
         st.download_button(
