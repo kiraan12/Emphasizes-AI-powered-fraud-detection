@@ -79,11 +79,15 @@ def load_model() -> ModelBundle | None:
 
 @st.cache_data
 def load_sample_data() -> pd.DataFrame | None:
-    """Load the credit card dataset."""
+    """Load the credit card dataset if available.
+
+    Returns None when the CSV is not deployed (e.g. Streamlit Community
+    Cloud, where large files are excluded via .gitignore). Pages that
+    require the dataset handle None gracefully.
+    """
     try:
         return pd.read_csv(DATA_PATH)
     except FileNotFoundError:
-        st.error(f"Data file not found at {DATA_PATH}")
         return None
 
 
@@ -191,8 +195,12 @@ def ai_chatbot_response(user_question: str, model_info: dict) -> str:
     return "🤖 **AI Assistant:** I can help with questions about fraud detection, model accuracy, features, and prevention strategies. Please ask a specific question!"
 
 
-def generate_ai_report(df: pd.DataFrame, model_info: dict) -> str:
-    """Generate an AI-powered analysis report using real metrics."""
+def generate_ai_report(df: pd.DataFrame | None, model_info: dict) -> str:
+    """Generate an AI-powered analysis report using real metrics.
+
+    ``df`` may be None when the dataset is not deployed; dataset-dependent
+    stats are then reported as unavailable rather than fabricated.
+    """
     try:
         test_metrics = model_info.get("test_metrics", {})
         model_name = model_info.get("model_name", "unknown")
@@ -200,6 +208,14 @@ def generate_ai_report(df: pd.DataFrame, model_info: dict) -> str:
         def fmt(key: str) -> str:
             val = test_metrics.get(key)
             return f"{val:.4f}" if isinstance(val, float) else "N/A"
+
+        if df is not None:
+            total_transactions = f"{len(df):,}"
+            fraud_rate = f"{(df['Class'].sum() / len(df)) * 100:.3f}%"
+            high_risk_count = f"{len(df[df['Amount'] > df['Amount'].quantile(0.95)]):,}"
+            avg_fraud_amount = f"${df[df['Class'] == 1]['Amount'].mean():.2f}"
+        else:
+            total_transactions = fraud_rate = high_risk_count = avg_fraud_amount = "N/A (dataset unavailable)"
 
         report = f"""
         # 🤖 AI-Powered Fraud Detection Analysis Report
@@ -211,8 +227,8 @@ def generate_ai_report(df: pd.DataFrame, model_info: dict) -> str:
         ## 🎯 Key Findings
 
         ### Dataset Analysis
-        - **Total Transactions**: {len(df):,}
-        - **Fraud Rate**: {(df['Class'].sum() / len(df)) * 100:.3f}%
+        - **Total Transactions**: {total_transactions}
+        - **Fraud Rate**: {fraud_rate}
         - **Model**: {model_name}
         - **Decision Threshold**: {model_info.get('threshold', 'N/A')}
 
@@ -224,8 +240,8 @@ def generate_ai_report(df: pd.DataFrame, model_info: dict) -> str:
         - **PR-AUC**: {fmt('pr_auc')}
 
         ### Risk Assessment
-        - **High-Risk Transactions**: {len(df[df['Amount'] > df['Amount'].quantile(0.95)]):,}
-        - **Average Fraud Amount**: ${df[df['Class'] == 1]['Amount'].mean():.2f}
+        - **High-Risk Transactions**: {high_risk_count}
+        - **Average Fraud Amount**: {avg_fraud_amount}
         - **Peak Fraud Hours**: Analysis of time patterns
 
         ## 💡 AI Recommendations
@@ -389,7 +405,9 @@ def main() -> None:
     bundle = load_model()
     df = load_sample_data()
 
-    if bundle is None or df is None:
+    # The model is required for all prediction pages; the dataset is optional
+    # (excluded from deployment via .gitignore on Streamlit Community Cloud).
+    if bundle is None:
         st.stop()
 
     model_info = get_model_info(bundle)
@@ -400,24 +418,26 @@ def main() -> None:
 
         # Sample data buttons — placed BEFORE the form so session_state
         # can be set before the input widgets are instantiated.
-        st.subheader("📋 Quick Sample Data")
-        col1, col2 = st.columns(2)
+        # Only shown when the dataset is available.
+        if df is not None:
+            st.subheader("📋 Quick Sample Data")
+            col1, col2 = st.columns(2)
 
-        with col1:
-            if st.button("📊 Load Legitimate Sample", type="secondary"):
-                sample = df[df["Class"] == 0].iloc[0]
-                for col in FEATURE_COLUMNS:
-                    st.session_state[f"feat_{col}"] = float(sample[col])
-                st.rerun()
-
-        with col2:
-            if st.button("🚨 Load Fraudulent Sample", type="secondary"):
-                fraud_df = df[df["Class"] == 1]
-                if len(fraud_df) > 0:
-                    sample = fraud_df.iloc[0]
+            with col1:
+                if st.button("📊 Load Legitimate Sample", type="secondary"):
+                    sample = df[df["Class"] == 0].iloc[0]
                     for col in FEATURE_COLUMNS:
                         st.session_state[f"feat_{col}"] = float(sample[col])
-                st.rerun()
+                    st.rerun()
+
+            with col2:
+                if st.button("🚨 Load Fraudulent Sample", type="secondary"):
+                    fraud_df = df[df["Class"] == 1]
+                    if len(fraud_df) > 0:
+                        sample = fraud_df.iloc[0]
+                        for col in FEATURE_COLUMNS:
+                            st.session_state[f"feat_{col}"] = float(sample[col])
+                    st.rerun()
 
         with st.form("fraud_detection_form"):
             features = create_feature_inputs()
@@ -433,30 +453,38 @@ def main() -> None:
     elif page == "📊 Data Analysis":
         st.markdown("### Dataset Overview and Visualizations")
 
-        col1, col2, col3, col4 = st.columns(4)
+        if df is None:
+            st.info(
+                "The dataset file `creditcard.csv` is not available in this "
+                "deployment, so dataset analysis, insights, and visualizations "
+                "are disabled. Fraud Detection, AI Assistant, AI Report, and "
+                "About pages work without it."
+            )
+        else:
+            col1, col2, col3, col4 = st.columns(4)
 
-        with col1:
-            st.metric("Total Transactions", f"{len(df):,}")
+            with col1:
+                st.metric("Total Transactions", f"{len(df):,}")
 
-        with col2:
-            fraud_count = int(df["Class"].sum())
-            st.metric("Fraudulent Transactions", f"{fraud_count:,}")
+            with col2:
+                fraud_count = int(df["Class"].sum())
+                st.metric("Fraudulent Transactions", f"{fraud_count:,}")
 
-        with col3:
-            fraud_rate = (df["Class"].sum() / len(df)) * 100
-            st.metric("Fraud Rate", f"{fraud_rate:.2f}%")
+            with col3:
+                fraud_rate = (df["Class"].sum() / len(df)) * 100
+                st.metric("Fraud Rate", f"{fraud_rate:.2f}%")
 
-        with col4:
-            avg_amount = df["Amount"].mean()
-            st.metric("Average Amount", f"${avg_amount:.2f}")
+            with col4:
+                avg_amount = df["Amount"].mean()
+                st.metric("Average Amount", f"${avg_amount:.2f}")
 
-        st.subheader("🤖 AI-Powered Insights")
-        st.markdown(get_ai_insights(df))
+            st.subheader("🤖 AI-Powered Insights")
+            st.markdown(get_ai_insights(df))
 
-        create_data_visualizations(df)
+            create_data_visualizations(df)
 
-        st.subheader("📋 Sample Data")
-        st.dataframe(df.head(10), use_container_width=True)
+            st.subheader("📋 Sample Data")
+            st.dataframe(df.head(10), use_container_width=True)
 
     elif page == "🤖 AI Assistant":
         st.markdown("### 🤖 AI-Powered Fraud Detection Assistant")
