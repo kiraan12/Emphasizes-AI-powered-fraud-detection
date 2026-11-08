@@ -217,6 +217,7 @@ def get_model_info(bundle: ModelBundle) -> dict[str, Any]:
         "dataset_rows": bundle.metadata.get("dataset_rows"),
         "class_distribution": bundle.metadata.get("class_distribution"),
         "test_metrics": metrics.get("test", {}),
+        "validation_metrics": metrics.get("validation", {}).get(bundle.model_name, {}),
         "feature_columns": FEATURE_COLUMNS,
         "target_column": bundle.metadata.get("target_column", "Class"),
     }
