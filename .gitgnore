@@ -1,6 +1,8 @@
 # Large data files
 creditcard.csv
 *.csv
+# Exception: small demonstration sample is safe to commit
+!creditcard_sample.csv
 
 # Model files (too large for GitHub)
 *.pkl
