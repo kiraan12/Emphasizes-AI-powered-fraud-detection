@@ -7,6 +7,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # Data
 DATA_PATH = PROJECT_ROOT / "creditcard.csv"
+SAMPLE_DATA_PATH = PROJECT_ROOT / "creditcard_sample.csv"
 
 # Artifacts
 ARTIFACTS_DIR = PROJECT_ROOT / "artifacts"
