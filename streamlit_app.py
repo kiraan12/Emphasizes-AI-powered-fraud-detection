@@ -207,26 +207,72 @@ def generate_ai_report(df: pd.DataFrame | None, model_info: dict,
     demonstration data.
     """
     try:
-        test_metrics = model_info.get("test_metrics", {})
+        test_metrics = model_info.get("test_metrics") or {}
+        val_metrics = model_info.get("validation_metrics") or {}
         model_name = model_info.get("model_name", "unknown")
 
-        def fmt(key: str) -> str:
-            val = test_metrics.get(key)
-            return f"{val:.4f}" if isinstance(val, float) else "N/A"
+        metric_keys = [
+            ("precision", "Precision"),
+            ("recall", "Recall"),
+            ("f1", "F1-Score"),
+            ("roc_auc", "ROC-AUC"),
+            ("pr_auc", "PR-AUC"),
+        ]
+
+        def fmt_pct(metrics: dict, key: str) -> str:
+            val = metrics.get(key)
+            return f"{val * 100:.2f}%" if isinstance(val, (int, float)) else "N/A"
+
+        if test_metrics:
+            perf_lines = ["### Model Performance (Test Set — final)"]
+            perf_lines += [
+                f"- **{label}**: {fmt_pct(test_metrics, key)}"
+                for key, label in metric_keys
+            ]
+            if val_metrics:
+                perf_lines += [
+                    "",
+                    "### Validation Metrics (model selection — not final test results)",
+                ]
+                perf_lines += [
+                    f"- **{label}**: {fmt_pct(val_metrics, key)}"
+                    for key, label in metric_keys
+                ]
+            performance_section = "\n        ".join(perf_lines)
+        else:
+            performance_section = (
+                "### Model Performance\n"
+                "        - Metrics unavailable: `artifacts/metrics.json` is missing "
+                "or incomplete. Run `python -m app.ml.training` and redeploy."
+            )
 
         if df is not None:
             total_transactions = f"{len(df):,}"
             fraud_rate = f"{(df['Class'].sum() / len(df)) * 100:.3f}%"
             high_risk_count = f"{len(df[df['Amount'] > df['Amount'].quantile(0.95)]):,}"
             avg_fraud_amount = f"${df[df['Class'] == 1]['Amount'].mean():.2f}"
+            fraud_times = df.loc[df["Class"] == 1, "Time"]
+            if len(fraud_times):
+                peak_hour = int(((fraud_times // 3600) % 24).mode().iloc[0])
+                peak_hours = f"{peak_hour:02d}:00"
+            else:
+                peak_hours = "N/A"
             data_note = (
                 "- **Data source**: Demonstration sample (`creditcard_sample.csv`) — "
-                "statistics below are illustrative, not full-dataset results\n"
+                "all dataset statistics in this report are illustrative "
+                "sample-based results, not full-dataset results\n"
+                if data_source == "sample" else ""
+            )
+            risk_note = (
+                "- **Note**: dataset-dependent stats below are from the "
+                "demonstration sample, not the full dataset\n"
                 if data_source == "sample" else ""
             )
         else:
             total_transactions = fraud_rate = high_risk_count = avg_fraud_amount = "N/A (dataset unavailable)"
+            peak_hours = "N/A (dataset unavailable)"
             data_note = ""
+            risk_note = ""
 
         report = f"""
         # 🤖 AI-Powered Fraud Detection Analysis Report
@@ -243,17 +289,12 @@ def generate_ai_report(df: pd.DataFrame | None, model_info: dict,
         - **Model**: {model_name}
         - **Decision Threshold**: {model_info.get('threshold', 'N/A')}
 
-        ### Model Performance (Test Set)
-        - **Precision**: {fmt('precision')}
-        - **Recall**: {fmt('recall')}
-        - **F1-Score**: {fmt('f1')}
-        - **ROC-AUC**: {fmt('roc_auc')}
-        - **PR-AUC**: {fmt('pr_auc')}
+        {performance_section}
 
         ### Risk Assessment
-        - **High-Risk Transactions**: {high_risk_count}
+        {risk_note}- **High-Risk Transactions**: {high_risk_count}
         - **Average Fraud Amount**: {avg_fraud_amount}
-        - **Peak Fraud Hours**: Analysis of time patterns
+        - **Peak Fraud Hours**: {peak_hours}
 
         ## 💡 AI Recommendations
         1. **Real-time Monitoring**: Implement 24/7 transaction monitoring
